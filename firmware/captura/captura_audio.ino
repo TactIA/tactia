@@ -9,16 +9,21 @@
 // IMPORTANTE:
 //  - O baud rate aqui (921600) tem que ser EXATAMENTE igual ao
 //    BAUD_RATE do script Python.
+//  - O áudio é enviado como int16 little-endian (binário, 2 bytes
+//    por amostra) via Serial.write() — NÃO use Serial.println().
+//  - O canal enviado é a MÉDIA dos dois canais (L+R)/2, truncada
+//    para int16, idêntico ao processamento do firmware de inferência.
+//    Isso garante que o dataset represente exatamente o que a IA vê.
 //  - Depois de gravar o dataset, volte para o sketch de
-//    inferência normal (o que já está funcionando com 91.7%).
+//    inferência normal.
 // =============================================================
 
 #include <Wire.h>
 #include "ESP_I2S.h"
 #include "pin_config.h"
 
-#define SAMPLE_RATE 16000
-#define TAMANHO_BLOCO 500
+#define SAMPLE_RATE    16000
+#define TAMANHO_BLOCO  500
 
 I2SClass i2s;
 
@@ -63,7 +68,10 @@ void es7210_init() {
   writeReg(0x04, 0x01);
   writeReg(0x05, 0x00);
 
-  uint8_t gainVal = 5;  // GANHO REDUZIDO PARA EVITAR ESTOURO DO ÁUDIO
+  // IMPORTANTE: este gainVal deve ser IDÊNTICO ao usado no sketch de inferência.
+  // Qualquer diferença de ganho entre dataset e inferência invalida a
+  // consistência espectral e degrada a acurácia do modelo.
+  uint8_t gainVal = 5;
   updateBits(0x43, 0x10, 0x00);
   updateBits(0x44, 0x10, 0x00);
   writeReg(0x4B, 0xFF);
@@ -96,9 +104,8 @@ void setup() {
             I2S_SLOT_MODE_STEREO, I2S_STD_SLOT_BOTH);
 
   delay(500);
-  // Não imprima nada além de números aqui — o Python descarta
-  // linhas não numéricas, mas cada print extra é uma leitura
-  // desperdiçada no reset_input_buffer().
+  // Não imprima nada além dos bytes de áudio aqui —
+  // o Python lê bytes brutos e qualquer dado extra corrompe o .wav.
 }
 
 void loop() {
@@ -107,9 +114,12 @@ void loop() {
 
   if (lidos > 0) {
     size_t amostras_lidas = lidos / sizeof(int16_t);
-    for (size_t j = 0; j < amostras_lidas; j += 2) {
-      // pega só o canal esquerdo (mesmo canal usado na inferência)
-      Serial.write((uint8_t *)&buffer_i2s[j], 2);
+    for (size_t j = 0; j + 1 < amostras_lidas; j += 2) {
+      // Mesma operação do firmware de inferência:
+      // média dos dois canais → int16 little-endian
+      int32_t media = ((int32_t)buffer_i2s[j] + (int32_t)buffer_i2s[j + 1]) / 2;
+      int16_t amostra = (int16_t)media;
+      Serial.write((uint8_t *)&amostra, 2);
     }
   }
 }
