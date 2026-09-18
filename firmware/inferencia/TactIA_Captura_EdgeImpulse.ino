@@ -2,7 +2,7 @@
 // TactIA — INFERÊNCIA (sketch de produção)
 // =============================================================
 // Roda o modelo Edge Impulse (TFLite Micro) em tempo real,
-// classifica sons e aciona vibração háptica via DRV2605L (I2C).
+// classifica sons e aciona vibração háptica via GPIO (motor moeda).
 //
 // Melhorias aplicadas:
 //  - Normalização de features para [-1.0, 1.0] (fix crítico de precisão)
@@ -11,7 +11,7 @@
 //  - Thresholds por classe calibrados
 //  - Votação por janela de 5 frames (sons intermitentes)
 //  - Cooldown sem zerar buffer (sons longos/contínuos)
-//  - Padrões de vibração distintos por classe via DRV2605L
+//  - Padrões de vibração distintos por classe via GPIO
 //  - features[] local na task (sem race condition futura)
 // =============================================================
 
@@ -20,10 +20,9 @@
 #include <WiFi.h>
 #include "ESP_I2S.h"
 #include "pin_config.h"
-#include <Adafruit_DRV2605.h>
 
 // --------------- Pinos / constantes ---------------
-#define PINO_MOTOR    16        // usado como fallback se DRV2605L não iniciar
+#define PINO_MOTOR    16        // motor moeda controlado direto via GPIO
 #define SAMPLE_RATE   16000
 
 // Tamanho da meia-janela (shift de 500 ms a 16 kHz)
@@ -41,18 +40,16 @@
 struct ClasseConfig {
   const char *label;
   float      threshold;
-  uint8_t    efeito_drv;   // efeito da biblioteca Adafruit DRV2605 (1–123)
   int        pulsos;       // quantos pulsos de vibração
   int        duracao_ms;   // duração de cada pulso em ms
   int        pausa_ms;     // pausa entre pulsos em ms
 };
 
-// Referência de efeitos: https://cdn-shop.adafruit.com/datasheets/DRV2605L.pdf pág. 57
 static const ClasseConfig CLASSES[] = {
-  { "alarme",    0.78f,  14, 4, 150, 100 },  // 4 pulsos rápidos
-  { "buzina",    0.80f,  12, 3, 200, 120 },  // 3 pulsos intensos
-  { "campainha", 0.82f,  52, 2, 250, 200 },  // 2 pulsos médios
-  { "sirene",    0.75f,  58, 1, 800,   0 },  // 1 pulso longo crescente
+  { "alarme",    0.78f, 4, 150, 100 },  // 4 pulsos rápidos
+  { "buzina",    0.80f, 3, 200, 120 },  // 3 pulsos intensos
+  { "campainha", 0.82f, 2, 250, 200 },  // 2 pulsos médios
+  { "sirene",    0.75f, 1, 800,   0 },  // 1 pulso longo
 };
 static const int NUM_CLASSES = sizeof(CLASSES) / sizeof(CLASSES[0]);
 
@@ -60,9 +57,7 @@ static const int NUM_CLASSES = sizeof(CLASSES) / sizeof(CLASSES[0]);
 #define COOLDOWN_MS   3000      // ms sem novo disparo após alerta confirmado
 
 // --------------- Objetos globais ------------------
-I2SClass          i2s;
-Adafruit_DRV2605  drv;
-bool              drv_ok = false;
+I2SClass i2s;
 
 // =============================================================
 // Inicialização do ES7210 (codec / matriz de microfones)
@@ -129,27 +124,17 @@ void es7210_init() {
 }
 
 // =============================================================
-// Disparo de vibração: tenta DRV2605L, cai de volta para GPIO
+// Disparo de vibração — GPIO direto no motor moeda
 // =============================================================
 void vibrar(const ClasseConfig &cfg) {
   Serial.printf("🔔 Padrão háptico: %s (%d pulso(s) de %dms)\n",
                 cfg.label, cfg.pulsos, cfg.duracao_ms);
 
-  if (drv_ok) {
-    drv.setWaveform(0, cfg.efeito_drv);
-    drv.setWaveform(1, 0);  // fim da sequência
-    for (int p = 0; p < cfg.pulsos; p++) {
-      drv.go();
-      vTaskDelay(pdMS_TO_TICKS(cfg.duracao_ms + cfg.pausa_ms));
-    }
-  } else {
-    // Fallback: GPIO direto no motor
-    for (int p = 0; p < cfg.pulsos; p++) {
-      digitalWrite(PINO_MOTOR, HIGH);
-      vTaskDelay(pdMS_TO_TICKS(cfg.duracao_ms));
-      digitalWrite(PINO_MOTOR, LOW);
-      if (cfg.pausa_ms > 0) vTaskDelay(pdMS_TO_TICKS(cfg.pausa_ms));
-    }
+  for (int p = 0; p < cfg.pulsos; p++) {
+    digitalWrite(PINO_MOTOR, HIGH);
+    vTaskDelay(pdMS_TO_TICKS(cfg.duracao_ms));
+    digitalWrite(PINO_MOTOR, LOW);
+    if (cfg.pausa_ms > 0) vTaskDelay(pdMS_TO_TICKS(cfg.pausa_ms));
   }
 }
 
@@ -305,20 +290,8 @@ void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_OFF);
 
-  // Motor GPIO (fallback)
   pinMode(PINO_MOTOR, OUTPUT);
   digitalWrite(PINO_MOTOR, LOW);
-
-  // DRV2605L via I2C principal (SDA/SCL padrão do ESP32-S3)
-  Wire.begin();
-  if (drv.begin()) {
-    drv.selectLibrary(1);
-    drv.setMode(DRV2605_MODE_INTTRIG);
-    drv_ok = true;
-    Serial.println("DRV2605L inicializado com sucesso.");
-  } else {
-    Serial.println("⚠️  DRV2605L não encontrado — usando GPIO direto no motor.");
-  }
 
   Wire1.begin(15, 14);
   es7210_init();
