@@ -2,7 +2,8 @@
 // TactIA — INFERÊNCIA (sketch de produção)
 // =============================================================
 // Roda o modelo Edge Impulse (TFLite Micro) em tempo real,
-// classifica sons e aciona vibração háptica via GPIO (motor moeda).
+// classifica sons e reporta alertas pela Serial.
+// Motor de vibração desativado — adicionar quando o hardware estiver conectado.
 //
 // Melhorias aplicadas:
 //  - Normalização de features para [-1.0, 1.0] (fix crítico de precisão)
@@ -11,7 +12,6 @@
 //  - Thresholds por classe calibrados
 //  - Votação por janela de 5 frames (sons intermitentes)
 //  - Cooldown sem zerar buffer (sons longos/contínuos)
-//  - Padrões de vibração distintos por classe via GPIO
 //  - features[] local na task (sem race condition futura)
 // =============================================================
 
@@ -22,7 +22,7 @@
 #include "pin_config.h"
 
 // --------------- Pinos / constantes ---------------
-#define PINO_MOTOR    16        // motor moeda controlado direto via GPIO
+// #define PINO_MOTOR 16  // descomente quando o motor estiver conectado
 #define SAMPLE_RATE   16000
 
 // Tamanho da meia-janela (shift de 500 ms a 16 kHz)
@@ -35,21 +35,17 @@
 // --------------- Thresholds por classe ------------
 // Calibre estes valores com a matriz de confusão do Edge Impulse
 // (Model Testing → Confusion Matrix). Ordem igual ao label do modelo.
-// Classes: alarme | buzina | campainha | sirene  (ordem alfabética padrão EI)
 // Se a ordem dos seus labels for diferente, ajuste o array abaixo.
 struct ClasseConfig {
   const char *label;
   float      threshold;
-  int        pulsos;       // quantos pulsos de vibração
-  int        duracao_ms;   // duração de cada pulso em ms
-  int        pausa_ms;     // pausa entre pulsos em ms
 };
 
 static const ClasseConfig CLASSES[] = {
-  { "alarme",    0.78f, 4, 150, 100 },  // 4 pulsos rápidos
-  { "buzina",    0.80f, 3, 200, 120 },  // 3 pulsos intensos
-  { "campainha", 0.82f, 2, 250, 200 },  // 2 pulsos médios
-  { "sirene",    0.75f, 1, 800,   0 },  // 1 pulso longo
+  { "alarme",    0.78f },
+  { "buzina",    0.80f },
+  { "campainha", 0.82f },
+  { "sirene",    0.75f },
 };
 static const int NUM_CLASSES = sizeof(CLASSES) / sizeof(CLASSES[0]);
 
@@ -121,21 +117,6 @@ void es7210_init() {
   writeReg(0x4B, 0x0F);
   writeReg(0x00, 0x71);
   writeReg(0x00, 0x41);
-}
-
-// =============================================================
-// Disparo de vibração — GPIO direto no motor moeda
-// =============================================================
-void vibrar(const ClasseConfig &cfg) {
-  Serial.printf("🔔 Padrão háptico: %s (%d pulso(s) de %dms)\n",
-                cfg.label, cfg.pulsos, cfg.duracao_ms);
-
-  for (int p = 0; p < cfg.pulsos; p++) {
-    digitalWrite(PINO_MOTOR, HIGH);
-    vTaskDelay(pdMS_TO_TICKS(cfg.duracao_ms));
-    digitalWrite(PINO_MOTOR, LOW);
-    if (cfg.pausa_ms > 0) vTaskDelay(pdMS_TO_TICKS(cfg.pausa_ms));
-  }
 }
 
 // =============================================================
@@ -262,18 +243,11 @@ void tarefa_ia(void *pvParameters) {
     // 6. DISPARO — cooldown impede reativação sem zerar o buffer
     // ----------------------------------------------------------
     if (max_votos >= VOTOS_MINIMOS && millis() > cooldown_ate) {
-      // Localiza config da classe vencedora
-      int cfg_idx = -1;
-      for (int c = 0; c < NUM_CLASSES; c++) {
-        if (classe_vencedora == String(CLASSES[c].label)) { cfg_idx = c; break; }
-      }
-
       Serial.println("=========================================");
       Serial.printf("🚨 PERIGO CONFIRMADO: %s (%d/%d votos)\n",
                     classe_vencedora.c_str(), max_votos, JANELA_VOTO);
       Serial.println("=========================================");
-
-      if (cfg_idx >= 0) vibrar(CLASSES[cfg_idx]);
+      // TODO: acionar motor quando o hardware estiver conectado
 
       // Inicia cooldown e limpa janela de votos (sem tocar no buffer de áudio)
       cooldown_ate = millis() + COOLDOWN_MS;
@@ -290,8 +264,7 @@ void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_OFF);
 
-  pinMode(PINO_MOTOR, OUTPUT);
-  digitalWrite(PINO_MOTOR, LOW);
+  // pinMode(PINO_MOTOR, OUTPUT);  // descomente quando o motor estiver conectado
 
   Wire1.begin(15, 14);
   es7210_init();
