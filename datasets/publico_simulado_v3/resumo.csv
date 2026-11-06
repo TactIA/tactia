@@ -1,0 +1,11 @@
+classe,split,real,sintetico,total,fontes_reais_distintas
+alarme,train,6681,2599,9280,309
+alarme,test,1670,650,2320,77
+ambiente,train,11392,1408,12800,4155
+ambiente,test,2849,352,3201,1059
+buzina,train,6400,1600,8000,194
+buzina,test,1365,635,2000,39
+campainha,train,247,9033,9280,11
+campainha,test,88,2232,2320,3
+sirene,train,7424,1856,9280,1215
+sirene,test,1856,464,2320,306
