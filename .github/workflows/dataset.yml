@@ -1,0 +1,27 @@
+name: Validação do dataset
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "datasets/**"
+      - "ml/validar_dataset.py"
+      - ".github/workflows/dataset.yml"
+  pull_request:
+    paths:
+      - "datasets/**"
+      - "ml/validar_dataset.py"
+  workflow_dispatch:
+
+jobs:
+  validar:
+    name: Rótulos, formato e vazamento treino/teste
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "numpy>=1.26" "soundfile>=0.12"
+      - name: Valida os ~62 mil áudios
+        run: python ml/validar_dataset.py datasets --resumo "$GITHUB_STEP_SUMMARY"
