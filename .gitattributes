@@ -1,0 +1,5 @@
+*.wav binary
+*.stl binary
+*.docx binary
+# datasets não entram na estatística de linguagens do GitHub
+datasets/** linguist-generated
