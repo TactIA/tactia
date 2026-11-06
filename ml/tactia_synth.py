@@ -6,6 +6,7 @@ Cada função recebe um numpy Generator e devolve (audio_float32, info_dict).
 O áudio sai "seco" (sem sala, sem microfone): a sala e o microfone do relógio
 são aplicados depois pelo simulador.
 """
+
 import numpy as np
 import scipy.signal as sps
 
@@ -21,12 +22,14 @@ def _env_adsr(n, a, d, s, r, sustain_len):
     """Envelope ADSR em amostras."""
     a, d, r = int(a * SR), int(d * SR), int(r * SR)
     sl = int(sustain_len * SR)
-    env = np.concatenate([
-        np.linspace(0, 1, max(a, 1), endpoint=False),
-        np.linspace(1, s, max(d, 1), endpoint=False),
-        np.full(max(sl, 0), s),
-        np.linspace(s, 0, max(r, 1)),
-    ])
+    env = np.concatenate(
+        [
+            np.linspace(0, 1, max(a, 1), endpoint=False),
+            np.linspace(1, s, max(d, 1), endpoint=False),
+            np.full(max(sl, 0), s),
+            np.linspace(s, 0, max(r, 1)),
+        ]
+    )
     out = np.zeros(n, dtype=np.float64)
     m = min(n, len(env))
     out[:m] = env[:m]
@@ -38,7 +41,7 @@ def _place(buf, x, start):
     if s >= len(buf):
         return
     m = min(len(x), len(buf) - s)
-    buf[s:s + m] += x[:m]
+    buf[s : s + m] += x[:m]
 
 
 def _strike_click(rng, dur=0.004, fc=(1500, 5000)):
@@ -69,9 +72,13 @@ def _modal_tone(rng, f0, ratios, amps, t60s, dur, detune=0.003):
 # --------------------------------------------------------------------------
 # CAMPAINHA
 # --------------------------------------------------------------------------
-BAR_RATIOS = [1.0, 2.756, 5.404, 8.933]          # barra livre-livre
-TUBE_RATIOS = [1.0, 2.76, 5.40, 8.93, 13.34]      # tubo (aprox.)
-NOTE = lambda midi: 440.0 * 2 ** ((midi - 69) / 12)
+BAR_RATIOS = [1.0, 2.756, 5.404, 8.933]  # barra livre-livre
+TUBE_RATIOS = [1.0, 2.76, 5.40, 8.93, 13.34]  # tubo (aprox.)
+
+
+def NOTE(midi):
+    return 440.0 * 2 ** ((midi - 69) / 12)
+
 
 MELODIES = {
     "dingdong": [(76, 0.0), (72, 0.55)],
@@ -82,7 +89,17 @@ MELODIES = {
     "ding_dong_ding": [(76, 0.0), (72, 0.45), (76, 0.9)],
     "descendente": [(84, 0.0), (81, 0.2), (77, 0.4), (72, 0.6)],
     "big_ben": [(71, 0.0), (67, 0.5), (69, 1.0), (62, 1.5)],
-    "fur_elise": [(76, 0.0), (75, 0.18), (76, 0.36), (75, 0.54), (76, 0.72), (71, 0.9), (74, 1.08), (72, 1.26), (69, 1.44)],
+    "fur_elise": [
+        (76, 0.0),
+        (75, 0.18),
+        (76, 0.36),
+        (75, 0.54),
+        (76, 0.72),
+        (71, 0.9),
+        (74, 1.08),
+        (72, 1.26),
+        (69, 1.44),
+    ],
 }
 
 
@@ -191,8 +208,15 @@ def doorbell_bell_ringer(rng):
     amps = [1.0, 0.6, 0.4, 0.25, 0.15]
     t60 = rng.uniform(0.6, 2.0)
     for i in range(nstrikes):
-        tone = _modal_tone(rng, f0, ratios, [a * rng.uniform(0.7, 1.0) for a in amps],
-                           [t60, t60 * 0.6, t60 * 0.4, t60 * 0.25, t60 * 0.15], 0.6, detune=0.0005)
+        tone = _modal_tone(
+            rng,
+            f0,
+            ratios,
+            [a * rng.uniform(0.7, 1.0) for a in amps],
+            [t60, t60 * 0.6, t60 * 0.4, t60 * 0.25, t60 * 0.15],
+            0.6,
+            detune=0.0005,
+        )
         tone[: int(0.003 * SR)] += _strike_click(rng, 0.003) * 0.5
         _place(y, tone * rng.uniform(0.8, 1.0), t0 + i / rate + rng.normal(0, 0.002))
     return y, {"tipo": "sino_eletromecanico"}
@@ -334,7 +358,6 @@ ALARM_SYNTHS = [
 # --------------------------------------------------------------------------
 def _horn_voice(rng, f0, n, brightness):
     """Buzina eletromagnética de disco: diafragma batendo -> forma de pulso rica."""
-    t = _t(n)
     jitter = 1 + 0.003 * sps.lfilter([0.01], [1, -0.99], rng.standard_normal(n))
     ph = 2 * np.pi * np.cumsum(f0 * jitter) / SR
     x = np.zeros(n)

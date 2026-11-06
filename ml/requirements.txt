@@ -1,0 +1,6 @@
+# pipeline completo de geração do dataset (ml/pipeline)
+numpy>=1.26
+scipy>=1.11
+soundfile>=0.12
+scikit-learn>=1.4
+matplotlib>=3.8

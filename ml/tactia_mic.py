@@ -18,7 +18,9 @@ típicas de MEMS analógicos, para o modelo não depender de um valor exato. Se 
 gravações reais do relógio, `perfil_mic.json` (gerado por calibrar_microfone.py) estreita
 essas faixas para o seu exemplar.
 """
+
 import json
+
 import numpy as np
 import scipy.signal as sps
 
@@ -107,7 +109,7 @@ def make_indoor_rir(rng):
     tail = _diffuse_tail(rng, bands, length, rng.uniform(0.004, 0.02))
     # razão direto/reverberante cai com a distância
     drr_db = 12 - 20 * np.log10(dist + 0.3) * rng.uniform(0.9, 1.4) + rng.normal(0, 2)
-    tail *= np.sqrt(np.sum(h ** 2) / (np.sum(tail ** 2) + 1e-12)) * db2lin(-drr_db)
+    tail *= np.sqrt(np.sum(h**2) / (np.sum(tail**2) + 1e-12)) * db2lin(-drr_db)
     h = h + tail
     return h / (np.max(np.abs(h)) + 1e-12), {"amb": "interno", "rt60": round(rt60, 2), "dist_m": round(dist, 1)}
 
@@ -125,7 +127,7 @@ def make_outdoor_rir(rng, dist):
         if int(d * SR) < len(h):
             h[int(d * SR)] += rng.uniform(0.03, 0.35) * rng.choice([-1, 1])
     tail = _diffuse_tail(rng, [rng.uniform(0.2, 0.6)] * 2 + [0.15, 0.08], length, 0.01)
-    tail *= np.sqrt(np.sum(h ** 2) / (np.sum(tail ** 2) + 1e-12)) * db2lin(-rng.uniform(12, 25))
+    tail *= np.sqrt(np.sum(h**2) / (np.sum(tail**2) + 1e-12)) * db2lin(-rng.uniform(12, 25))
     h = h + tail
     # absorção do ar (distância)
     fc = float(np.clip(9000 / (1 + dist / 120.0), 2200, 7400))
@@ -144,9 +146,9 @@ def through_window(rng, x):
 
 # ---------------------------------------------------------------- microfone
 DEFAULT_PROFILE = {
-    "sens_dbv": [-40.0, -36.0],        # sensibilidade MEMS analógico típica (dBV/Pa)
+    "sens_dbv": [-40.0, -36.0],  # sensibilidade MEMS analógico típica (dBV/Pa)
     "pga_db": [18, 21, 24, 24, 24, 24, 27, 27, 30, 33],
-    "fs_dbv": [-6.0, 0.0],              # entrada de fundo de escala do ADC (dBV rms)
+    "fs_dbv": [-6.0, 0.0],  # entrada de fundo de escala do ADC (dBV rms)
     "hpf_hz": [60.0, 220.0],
     "res_hz": [3500.0, 7000.0],
     "res_gain_db": [1.0, 8.0],
@@ -172,7 +174,8 @@ class WatchMic:
     def __init__(self, profile=None):
         self.p = profile or dict(DEFAULT_PROFILE)
         if "floor_psd_db" in self.p:
-            f = np.array(self.p["floor_psd_hz"]); d = np.array(self.p["floor_psd_db"])
+            f = np.array(self.p["floor_psd_hz"])
+            d = np.array(self.p["floor_psd_db"])
             self._ff, self._fd = f, d
 
     def _floor_noise(self, rng, n, m):
@@ -187,13 +190,18 @@ class WatchMic:
 
     def sample(self, rng):
         p = self.p
-        u = lambda k: float(rng.uniform(*p[k]))
+
+        def u(k):
+            return float(rng.uniform(*p[k]))
+
         return {
             "sens_dbv": u("sens_dbv"),
             "pga_db": float(rng.choice(p["pga_db"])),
             "fs_dbv": u("fs_dbv"),
             "hpf_hz": float(np.exp(rng.uniform(np.log(p["hpf_hz"][0]), np.log(p["hpf_hz"][1])))),
-            "res_hz": u("res_hz"), "res_gain_db": u("res_gain_db"), "res_q": u("res_q"),
+            "res_hz": u("res_hz"),
+            "res_gain_db": u("res_gain_db"),
+            "res_q": u("res_q"),
             "lpf_hz": u("lpf_hz"),
             "snr_dba": u("snr_dba"),
             "aop_spl": u("aop_spl"),
@@ -219,8 +227,10 @@ class WatchMic:
         m = m or self.sample(rng)
         x = np.asarray(pa, dtype=np.float64)
         # corpo/pulso
-        b, a = _biquad("lowshelf", 250, 0.7, m["body_low_db"]); x = sps.lfilter(b, a, x)
-        b, a = _biquad("highshelf", 2500, 0.7, m["body_high_db"]); x = sps.lfilter(b, a, x)
+        b, a = _biquad("lowshelf", 250, 0.7, m["body_low_db"])
+        x = sps.lfilter(b, a, x)
+        b, a = _biquad("highshelf", 2500, 0.7, m["body_high_db"])
+        x = sps.lfilter(b, a, x)
         # par de microfones
         if m["dual_avg"]:
             x2 = frac_delay(x, m["mic_delay_us"] * 1e-6 * SR) * db2lin(m["mic_mismatch_db"])
@@ -229,7 +239,8 @@ class WatchMic:
         sos = sps.butter(2, m["hpf_hz"], btype="high", fs=SR, output="sos")
         x = sps.sosfilt(sos, x)
         # ressonância da porta acústica / cavidade
-        b, a = _biquad("peak", m["res_hz"], m["res_q"], m["res_gain_db"]); x = sps.lfilter(b, a, x)
+        b, a = _biquad("peak", m["res_hz"], m["res_q"], m["res_gain_db"])
+        x = sps.lfilter(b, a, x)
         # saturação suave perto do AOP
         aop = spl_to_pa(m["aop_spl"]) * np.sqrt(2)
         x = aop * np.tanh(x / aop)
@@ -239,8 +250,11 @@ class WatchMic:
             # ruído próprio do MEMS (branco + 1/f), nível a partir do SNR (ref 94 dB SPL)
             noise_spl = 94.0 - m["snr_dba"] + 1.5
             w = rng.standard_normal(n)
-            pink = sps.lfilter([0.049922035, -0.095993537, 0.050612699, -0.004408786],
-                               [1, -2.494956002, 2.017265875, -0.522189400], rng.standard_normal(n))
+            pink = sps.lfilter(
+                [0.049922035, -0.095993537, 0.050612699, -0.004408786],
+                [1, -2.494956002, 2.017265875, -0.522189400],
+                rng.standard_normal(n),
+            )
             nz = w / rms(w) + 0.5 * pink / (rms(pink) + 1e-12)
             x = x + nz / rms(nz) * spl_to_pa(noise_spl)
         # Pa -> fração do fundo de escala
@@ -263,7 +277,7 @@ class WatchMic:
                 y += db2lin(rng.uniform(-82, -60)) * np.sin(2 * np.pi * f * t + rng.uniform(0, 6.28))
             if rng.random() < 0.5:  # cliques periódicos (beacon Wi-Fi ~102.4 ms)
                 per = int(0.1024 * SR)
-                y[rng.integers(0, per)::per] += db2lin(rng.uniform(-75, -55)) * rng.choice([-1, 1])
+                y[rng.integers(0, per) :: per] += db2lin(rng.uniform(-75, -55)) * rng.choice([-1, 1])
         # ADC
         y = y + m["dc"]
         y = np.clip(y, -1.0, 1.0)  # sobrecarga do modulador (clipping analógico)

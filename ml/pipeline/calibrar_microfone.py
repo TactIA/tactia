@@ -9,11 +9,16 @@ Saída: perfil_mic.json, lido por tactia_mic.WatchMic.
 
 Uso: python3 calibrar_microfone.py perfil_mic.json silencio1.wav silencio2.wav ...
 """
-import sys, json, numpy as np, soundfile as sf, scipy.signal as sps
+
+import sys
+import json
+import numpy as np
+import soundfile as sf
+import scipy.signal as sps
 
 out = sys.argv[1]
 files = sys.argv[2:]
-x = np.concatenate([sf.read(p, dtype='float64')[0] for p in files])
+x = np.concatenate([sf.read(p, dtype="float64")[0] for p in files])
 rms_dbfs = 20 * np.log10(x.std())
 
 # PSD em alta resolução para tons; em baixa resolução para o formato do piso
@@ -31,8 +36,8 @@ for i in sps.find_peaks(db_hi - med, height=6, distance=20)[0]:
         continue
     b, a = sps.iirpeak(fc, 30, fs=16000)
     lvl = 20 * np.log10(sps.lfilter(b, a, x).std() + 1e-12)
-    tons.append({'hz': round(fc, 1), 'dbfs': round(float(lvl), 1)})
-tons = sorted(tons, key=lambda t: -t['dbfs'])[:6]
+    tons.append({"hz": round(fc, 1), "dbfs": round(float(lvl), 1)})
+tons = sorted(tons, key=lambda t: -t["dbfs"])[:6]
 
 # piso suave (sem os tons) para gerar ruído com o mesmo espectro
 smooth = sps.medfilt(db, 9)
@@ -46,14 +51,14 @@ res_hz = float(f[band][ir])
 res_db = float(resid[band][ir])
 
 perfil = {
-    'fonte_calibracao': f'{len(files)} gravações de silêncio do relógio ({len(x) / 16000:.0f} s)',
-    'floor_rms_dbfs': round(float(rms_dbfs), 2),
-    'floor_psd_hz': [round(float(v), 1) for v in f],
-    'floor_psd_db': [round(float(v), 2) for v in smooth],
-    'tons': tons,
-    'inclinacao_db_por_decada': round(float(coef[0]), 1),
-    'res_hz': [max(3000.0, res_hz - 400), min(7600.0, res_hz + 400)],
-    'res_gain_db': [max(1.0, res_db - 2), res_db + 2],
+    "fonte_calibracao": f"{len(files)} gravações de silêncio do relógio ({len(x) / 16000:.0f} s)",
+    "floor_rms_dbfs": round(float(rms_dbfs), 2),
+    "floor_psd_hz": [round(float(v), 1) for v in f],
+    "floor_psd_db": [round(float(v), 2) for v in smooth],
+    "tons": tons,
+    "inclinacao_db_por_decada": round(float(coef[0]), 1),
+    "res_hz": [max(3000.0, res_hz - 400), min(7600.0, res_hz + 400)],
+    "res_gain_db": [max(1.0, res_db - 2), res_db + 2],
 }
-json.dump(perfil, open(out, 'w'), indent=1, ensure_ascii=False)
-print(json.dumps({k: v for k, v in perfil.items() if not k.startswith('floor_psd')}, indent=1, ensure_ascii=False))
+json.dump(perfil, open(out, "w"), indent=1, ensure_ascii=False)
+print(json.dumps({k: v for k, v in perfil.items() if not k.startswith("floor_psd")}, indent=1, ensure_ascii=False))

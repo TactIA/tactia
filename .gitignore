@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+.DS_Store
+__MACOSX/
+# área de trabalho do pipeline (fontes baixadas, cache, features)
+ml/_trabalho/
+# biblioteca exportada do Edge Impulse (versionar só quando for marco)
+model/*.zip
