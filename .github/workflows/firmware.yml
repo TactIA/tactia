@@ -1,0 +1,32 @@
+name: Firmware
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware.yml"
+  pull_request:
+    paths:
+      - "firmware/**"
+  workflow_dispatch:
+
+jobs:
+  compilar:
+    name: Compila para ESP32-S3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: firmware
+      # O sketch de inferência depende da biblioteca exportada do Edge Impulse
+      # (TactIA_inferencing), que não é versionada; ele entra aqui quando ela for para model/.
+      - uses: arduino/compile-sketches@v1
+        with:
+          fqbn: esp32:esp32:esp32s3
+          platforms: |
+            - name: esp32:esp32
+              source-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          sketch-paths: |
+            - firmware/captura
+          enable-deltas-report: false
