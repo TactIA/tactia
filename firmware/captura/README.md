@@ -1,6 +1,7 @@
 # firmware/captura
 
-Sketch usado **apenas para gravar dataset**, não para inferência.
+Sketch usado **apenas para gravar dataset**, não para inferência. O arquivo
+principal é o `captura.ino` (mesmo nome da pasta, como o Arduino exige).
 
 Lê o áudio cru do microfone (via I2S / ES7210) e envia as amostras
 pela porta serial em **formato binário** (2 bytes por amostra,
@@ -26,3 +27,10 @@ int16 little-endian) usando `Serial.write()`.
    no computador conectado.
 3. Produz o som real perto do microfone durante a contagem
    regressiva / gravação.
+
+## Conferido no CI
+
+A cada push que mexe em `firmware/`, o GitHub Actions compila este sketch para o
+ESP32-S3 (`.github/workflows/firmware.yml`). Os testes de contrato
+(`tests/test_contratos_firmware.py`) conferem que o baud rate daqui é igual ao
+`BAUD_RATE` do script Python e que o `gainVal` é igual ao do sketch de inferência.

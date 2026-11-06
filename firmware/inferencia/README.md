@@ -5,11 +5,14 @@ Impulse (TensorFlow Lite Micro) em tempo real, classificando o
 áudio captado pelo microfone e disparando os alertas hápticos
 (DRV2605L) e visuais (tela AMOLED) conforme a classe detectada.
 
-> **Pendente**: adicionar aqui o(s) arquivo(s) `.ino` de inferência
-> atual(is). Ao adicionar, mantenha neste README uma nota da versão
-> do modelo em uso (ex: "modelo pós-crop de silêncio, acurácia real
-> ~XX% no Model testing") para rastrear qual firmware corresponde a
-> qual resultado de treino.
+O sketch é o `inferencia.ino` (o Arduino exige que o arquivo principal tenha o
+mesmo nome da pasta). Ele depende da biblioteca `TactIA_inferencing`, exportada
+do Edge Impulse em *Deployment > Arduino library*. Use a versão
+**Unoptimized (float32)**: no teste por injeção no relógio a versão int8 com
+ESP-NN acertou 10,5%, enquanto a float32 acertou 78,3%, reproduzindo o Studio.
+
+O ganho do microfone (`gainVal`) e a taxa de amostragem precisam ser iguais aos
+do `firmware/captura`. O CI confere isso a cada push (`tests/test_contratos_firmware.py`).
 
 ## Diferença em relação a `firmware/captura`
 
