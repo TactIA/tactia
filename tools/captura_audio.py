@@ -35,24 +35,26 @@ Rode o script várias vezes por classe, com o som acontecendo de
 verdade perto do microfone durante a contagem regressiva.
 """
 
-import sys
-import os
-import wave
-import time
 import glob
+import os
 import struct
+import sys
+import time
+import wave
+
 import serial
 
 # numpy é opcional — usado apenas para cálculo de RMS
 try:
     import numpy as np
+
     _NUMPY_OK = True
 except ImportError:
     _NUMPY_OK = False
 
-SAMPLE_RATE      = 16000
-BAUD_RATE        = 921600
-OUTPUT_DIR       = "dataset"
+SAMPLE_RATE = 16000
+BAUD_RATE = 921600
+OUTPUT_DIR = "dataset"
 BYTES_POR_AMOSTRA = 2  # int16
 
 # Limiar de RMS abaixo do qual a gravação é considerada "silenciosa".
@@ -71,7 +73,7 @@ def calcular_rms(dados: bytes) -> float:
         return 0.0
     if _NUMPY_OK:
         samples = np.frombuffer(dados, dtype="<i2").astype(np.float64)
-        return float(np.sqrt(np.mean(samples ** 2)))
+        return float(np.sqrt(np.mean(samples**2)))
     else:
         soma_quad = 0
         for i in range(n):
@@ -127,8 +129,7 @@ def validar_gravacao(dados: bytes, duracao: float) -> list[str]:
     # 1. Verificação de contagem de amostras
     if amostras < SAMPLE_RATE * 0.5:
         avisos.append(
-            f"Muito poucas amostras ({amostras}) — confira se o sketch de captura "
-            f"está rodando e a porta está correta."
+            f"Muito poucas amostras ({amostras}) — confira se o sketch de captura está rodando e a porta está correta."
         )
     else:
         diferenca_pct = abs(amostras - total_esperado) / total_esperado * 100
@@ -141,17 +142,13 @@ def validar_gravacao(dados: bytes, duracao: float) -> list[str]:
     # 2. Verificação de amplitude (RMS)
     rms = calcular_rms(dados)
     if rms < RMS_THRESHOLD:
-        avisos.append(
-            f"RMS muito baixo ({rms:.0f}) — áudio silencioso. "
-            f"Produza o som bem perto do microfone e refaça."
-        )
+        avisos.append(f"RMS muito baixo ({rms:.0f}) — áudio silencioso. Produza o som bem perto do microfone e refaça.")
 
     # 3. Verificação de pico absoluto
     pico = calcular_pico(dados)
     if pico < PICO_THRESHOLD:
         avisos.append(
-            f"Pico absoluto muito baixo ({pico}) — microfone pode estar "
-            f"desconectado ou o sketch errado está carregado."
+            f"Pico absoluto muito baixo ({pico}) — microfone pode estar desconectado ou o sketch errado está carregado."
         )
 
     return avisos
@@ -161,7 +158,7 @@ def salvar_wav(caminho: str, dados: bytes) -> None:
     amostras = len(dados) // BYTES_POR_AMOSTRA
     with wave.open(caminho, "w") as wav_file:
         wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)           # 16 bits
+        wav_file.setsampwidth(2)  # 16 bits
         wav_file.setframerate(SAMPLE_RATE)
         wav_file.writeframesraw(dados)
     print(f"Salvo: {caminho} ({amostras} amostras, ~{amostras / SAMPLE_RATE:.1f}s)")
@@ -177,39 +174,41 @@ def main() -> None:
         print("⚠️  numpy não encontrado — validação de RMS usa fallback puro-Python (mais lento).")
         print("   Instale com: pip install numpy")
 
-    porta  = sys.argv[1]
-    label  = sys.argv[2]
+    porta = sys.argv[1]
+    label = sys.argv[2]
     duracao = float(sys.argv[3]) if len(sys.argv) > 3 else 3.0
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    numero         = proxima_numeracao(label)
-    caminho_saida  = os.path.join(OUTPUT_DIR, f"{label}.{numero}.wav")
+    numero = proxima_numeracao(label)
+    caminho_saida = os.path.join(OUTPUT_DIR, f"{label}.{numero}.wav")
 
     print(f"\nConectando na porta {porta} a {BAUD_RATE} baud...")
     ser = serial.Serial(porta, BAUD_RATE, timeout=1)
-    time.sleep(2)          # aguarda o ESP32 estabilizar
+    time.sleep(2)  # aguarda o ESP32 estabilizar
     ser.reset_input_buffer()
 
     print(f"\nClasse: '{label}' | Duração: {duracao:.1f}s | Arquivo: {caminho_saida}")
     contagem_regressiva(3)
-    print(f"🎙️  GRAVANDO agora — produza o som perto do microfone!\n")
+    print("🎙️  GRAVANDO agora — produza o som perto do microfone!\n")
 
-    total_esperado  = int(SAMPLE_RATE * duracao)
+    total_esperado = int(SAMPLE_RATE * duracao)
     bytes_esperados = total_esperado * BYTES_POR_AMOSTRA
-    dados           = bytearray()
-    inicio          = time.time()
+    dados = bytearray()
+    inicio = time.time()
 
     while len(dados) < bytes_esperados and (time.time() - inicio) < (duracao + 5):
         faltam = bytes_esperados - len(dados)
-        chunk  = ser.read(faltam)
+        chunk = ser.read(faltam)
         dados.extend(chunk)
 
     ser.close()
 
     amostras_recebidas = len(dados) // BYTES_POR_AMOSTRA
-    tempo_real         = time.time() - inicio
-    print(f"Recebido: {amostras_recebidas} amostras em {tempo_real:.2f}s "
-          f"(esperado: {total_esperado} amostras / {duracao:.1f}s)")
+    tempo_real = time.time() - inicio
+    print(
+        f"Recebido: {amostras_recebidas} amostras em {tempo_real:.2f}s "
+        f"(esperado: {total_esperado} amostras / {duracao:.1f}s)"
+    )
 
     # Descarta bytes incompletos (último int16 parcial)
     dados = dados[: amostras_recebidas * BYTES_POR_AMOSTRA]
@@ -232,12 +231,12 @@ def main() -> None:
         salvar_wav(caminho_invalido, bytes(dados))
 
     # --- Estatísticas extras ---
-    rms  = calcular_rms(bytes(dados))
+    rms = calcular_rms(bytes(dados))
     pico = calcular_pico(bytes(dados))
-    print(f"\n📊 Estatísticas do áudio capturado:")
+    print("\n📊 Estatísticas do áudio capturado:")
     print(f"   RMS  : {rms:.0f}  (mínimo recomendado: {RMS_THRESHOLD})")
     print(f"   Pico : {pico}  (mínimo recomendado: {PICO_THRESHOLD})")
-    print(f"   Ganho do microfone: gainVal=5 (confirmar no sketch de captura)")
+    print("   Ganho do microfone: gainVal=5 (confirmar no sketch de captura)")
 
 
 if __name__ == "__main__":
